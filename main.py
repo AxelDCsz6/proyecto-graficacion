@@ -3,76 +3,140 @@ from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
 import numpy as np
+import random
 
 # ==========================================
 # CONFIGURACIÓN GENERAL
 # ==========================================
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
-WINDOW_TITLE = "Proyecto 3: Ciudad Entorno 3D - Equipo 5"
+WINDOW_TITLE = "Proyecto 3: Ciudad Flotante - Equipo 5"
+
+# Dimensiones de la isla
+ISLAND_SIZE = 40    # Tamaño total (40x40 unidades)
+STEP = 2            # Cada cuánto dibujamos un cuadro (resolución de la malla)
+DIRT_DEPTH = 5      # Qué tan gruesa es la capa de tierra hacia abajo
+
+# Listas para guardar la geometría del terreno y no recalcularla siempre
+vertex_data = []
 
 # ==========================================
-# CLASE O FUNCIONES DE AYUDA (WORLD)
+# GENERACIÓN DE TERRENO (Arquitectura)
 # ==========================================
 
-def draw_axes():
-    """Dibuja los ejes X, Y, Z para referencia espacial."""
-    glBegin(GL_LINES)
-    # Eje X (Rojo)
-    glColor3f(1, 0, 0)
-    glVertex3f(0, 0, 0)
-    glVertex3f(100, 0, 0)
-    # Eje Y (Verde - Altura)
-    glColor3f(0, 1, 0)
-    glVertex3f(0, 0, 0)
-    glVertex3f(0, 100, 0)
-    # Eje Z (Azul - Profundidad)
-    glColor3f(0, 0, 1)
-    glVertex3f(0, 0, 0)
-    glVertex3f(0, 0, 100)
+def generate_terrain_geometry():
+    """
+    Genera los vértices del terreno una sola vez al iniciar el programa.
+    Crea relieves aleatorios pero deja un camino plano para la carretera.
+    """
+    global vertex_data
+    vertex_data = []
+    
+    # Recorremos el área de la isla en cuadrícula
+    for x in range(-ISLAND_SIZE, ISLAND_SIZE, STEP):
+        row = []
+        for z in range(-ISLAND_SIZE, ISLAND_SIZE, STEP):
+            
+            # --- Lógica de Relieve ---
+            # Si estamos en el centro (donde va la calle), altura 0 (plano)
+            if -6 < x < 6: 
+                y = 0 
+            else:
+                # En el pasto, altura aleatoria suave (entre 0 y 1.5)
+                y = random.uniform(0, 1.5)
+            
+            row.append((x, y, z))
+        vertex_data.append(row)
+
+def draw_floating_island():
+    """
+    Dibuja la isla completa: Pasto, Carretera y el bloque de tierra (base).
+    """
+    rows = len(vertex_data)
+    cols = len(vertex_data[0])
+
+    # 1. DIBUJAR LA SUPERFICIE (Pasto y Carretera)
+    glBegin(GL_QUADS)
+    for r in range(rows - 1):
+        for c in range(cols - 1):
+            # Obtenemos los 4 puntos del cuadro actual
+            x1, y1, z1 = vertex_data[r][c]
+            x2, y2, z2 = vertex_data[r+1][c]
+            x3, y3, z3 = vertex_data[r+1][c+1]
+            x4, y4, z4 = vertex_data[r][c+1]
+
+            # Definir color según la zona
+            # Si la coordenada X está en el centro, es carretera (Gris)
+            if -6 < x1 < 6:
+                glColor3f(0.3, 0.3, 0.3) # Gris asfalto
+            else:
+                # Pasto: Variamos un poco el verde para que se vea texturizado
+                glColor3f(0.0, 0.6 + (y1/10), 0.0) 
+
+            # Dibujar el quad superior
+            glVertex3f(x1, y1, z1)
+            glVertex3f(x2, y2, z2)
+            glVertex3f(x3, y3, z3)
+            glVertex3f(x4, y4, z4)
     glEnd()
 
-def draw_terrain():
-    """
-    Dibuja el suelo de la ciudad. 
-    Es una malla (grid) grande para dar sensación de profundidad.
-    """
-    glColor3f(0.2, 0.2, 0.2) # Color gris oscuro para las líneas
-    
-    tamano = 100 # Qué tan grande es el mundo
-    paso = 5     # Espacio entre líneas
-    
+    # 2. DIBUJAR LÍNEAS DE LA CARRETERA (Detalle)
+    # Dibujamos líneas blancas en el centro
+    glLineWidth(3)
+    glColor3f(1, 1, 1)
     glBegin(GL_LINES)
-    for i in range(-tamano, tamano + paso, paso):
-        # Líneas paralelas al eje X
-        glVertex3f(-tamano, 0, i)
-        glVertex3f(tamano, 0, i)
-        # Líneas paralelas al eje Z
-        glVertex3f(i, 0, -tamano)
-        glVertex3f(i, 0, tamano)
+    glVertex3f(0, 0.1, -ISLAND_SIZE) # Un poquito arriba (0.1) para que no se traslape
+    glVertex3f(0, 0.1, ISLAND_SIZE)
     glEnd()
 
-# ==========================================
-# ZONA DE COLABORACIÓN
-# ==========================================
-# SUGERENCIA PARA COMPAÑEROS:
-# Importen sus funciones de dibujo aquí o defínanlas abajo.
-# Ejemplo: def dibujar_casa(): ...
+    # 3. DIBUJAR EL BLOQUE DE TIERRA (Los costados y el fondo)
+    # Esto da el efecto de isla flotante arrancada del suelo
+    glColor3f(0.35, 0.2, 0.05) # Marrón oscuro
 
+    glBegin(GL_QUADS)
+    # Tapa inferior (Fondo plano)
+    glVertex3f(-ISLAND_SIZE, -DIRT_DEPTH, -ISLAND_SIZE)
+    glVertex3f(-ISLAND_SIZE, -DIRT_DEPTH, ISLAND_SIZE)
+    glVertex3f(ISLAND_SIZE, -DIRT_DEPTH, ISLAND_SIZE)
+    glVertex3f(ISLAND_SIZE, -DIRT_DEPTH, -ISLAND_SIZE)
+    
+    # Paredes laterales (Simplificadas para el borde exterior)
+    # Lado Izquierdo
+    glVertex3f(-ISLAND_SIZE, 0, -ISLAND_SIZE)
+    glVertex3f(-ISLAND_SIZE, 0, ISLAND_SIZE)
+    glVertex3f(-ISLAND_SIZE, -DIRT_DEPTH, ISLAND_SIZE)
+    glVertex3f(-ISLAND_SIZE, -DIRT_DEPTH, -ISLAND_SIZE)
+    # Lado Derecho
+    glVertex3f(ISLAND_SIZE, 0, ISLAND_SIZE)
+    glVertex3f(ISLAND_SIZE, 0, -ISLAND_SIZE)
+    glVertex3f(ISLAND_SIZE, -DIRT_DEPTH, -ISLAND_SIZE)
+    glVertex3f(ISLAND_SIZE, -DIRT_DEPTH, ISLAND_SIZE)
+    # Lado Frontal
+    glVertex3f(-ISLAND_SIZE, 0, ISLAND_SIZE)
+    glVertex3f(ISLAND_SIZE, 0, ISLAND_SIZE)
+    glVertex3f(ISLAND_SIZE, -DIRT_DEPTH, ISLAND_SIZE)
+    glVertex3f(-ISLAND_SIZE, -DIRT_DEPTH, ISLAND_SIZE)
+    # Lado Trasero
+    glVertex3f(ISLAND_SIZE, 0, -ISLAND_SIZE)
+    glVertex3f(-ISLAND_SIZE, 0, -ISLAND_SIZE)
+    glVertex3f(-ISLAND_SIZE, -DIRT_DEPTH, -ISLAND_SIZE)
+    glVertex3f(ISLAND_SIZE, -DIRT_DEPTH, -ISLAND_SIZE)
+    glEnd()
+
+
+# ==========================================
+# ZONA DE COLABORACIÓN (Objetos)
+# ==========================================
 def draw_objects_scene():
     """
-    FUNCIÓN PRINCIPAL PARA DIBUJAR LOS 20 OBJETOS.
-    Compañeros: Agreguen sus llamadas a funciones aquí.
+    Aquí tus compañeros (Miguel, Jesus, Jose, Axel) agregarán sus objetos.
     """
-    # TODO: [Equipo] Aquí se deben instanciar los 20 objetos móviles.
-    # Ejemplo placeholder (un cubo simple en el centro):
+    # Placeholder: Un cubo rojo flotando sobre la carretera para referencia
     glPushMatrix()
-    glTranslatef(0, 2, 0) # Moverlo un poco arriba
-    glColor3f(1, 1, 0)    # Amarillo
-    # glutSolidCube(2)    # Requiere GLUT, usamos primitiva manual si no hay GLUT:
-    # (Aquí irían sus funciones como draw_snowman() o draw_house())
+    glTranslatef(0, 2, 0) 
+    glColor3f(1, 0, 0)
+    # glutSolidCube(2) # Usar si GLUT está disponible, sino dibujar manual
     glPopMatrix()
-    
     pass
 
 # ==========================================
@@ -80,21 +144,22 @@ def draw_objects_scene():
 # ==========================================
 
 def main():
-    # Inicializar Pygame y OpenGL
     pygame.init()
     display = (SCREEN_WIDTH, SCREEN_HEIGHT)
     pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
     pygame.display.set_caption(WINDOW_TITLE)
 
-    # Configuración de la Cámara (Perspectiva)
+    glEnable(GL_DEPTH_TEST) # Importante: Activar profundidad para que no se vea transparente lo de atrás
     glMatrixMode(GL_PROJECTION)
     gluPerspective(45, (display[0]/display[1]), 0.1, 1000.0)
     glMatrixMode(GL_MODELVIEW)
 
-    # Variables de cámara (gluLookAt) iniciales
-    # Estas variables serán las que modifique MediaPipe más adelante
-    cam_x, cam_y, cam_z = 0, 10, 30  # Posición de la cámara (Ojo)
-    look_x, look_y, look_z = 0, 0, 0 # A dónde mira la cámara (Centro)
+    # Generamos el terreno UNA vez antes del bucle
+    generate_terrain_geometry()
+
+    # Variables de cámara iniciales
+    cam_x, cam_y, cam_z = 30, 25, 50 
+    look_x, look_y, look_z = 0, 0, 0 
 
     running = True
     clock = pygame.time.Clock()
@@ -103,32 +168,24 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            
-            # TODO: [Equipo/MediaPipe] Aquí se puede agregar input de teclado 
-            # temporalmente para pruebas antes de tener MediaPipe listo.
 
-        # 1. Limpiar pantalla y buffer de profundidad
+        # Color de fondo (Cielo etéreo - Azul claro casi blanco)
+        glClearColor(0.5, 0.8, 0.9, 1) 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
-        # 2. Configurar la cámara en cada frame
         glLoadIdentity()
         
-        # TODO: [MediaPipe] Aquí se actualizarán cam_x, cam_y, cam_z
-        # basándose en los landmarks de la mano.
-        gluLookAt(cam_x, cam_y, cam_z,  # Ojo
-                  look_x, look_y, look_z, # Objetivo
-                  0, 1, 0)              # Up Vector (Y es arriba)
+        # Cámara mirando hacia el centro de la isla
+        gluLookAt(cam_x, cam_y, cam_z, look_x, look_y, look_z, 0, 1, 0)
 
-        # 3. Dibujar el entorno estático
-        draw_axes()
-        draw_terrain()
+        # Dibujar nuestra arquitectura base
+        draw_floating_island()
 
-        # 4. Dibujar los objetos del equipo (Casas, Snowman, Coches, etc.)
+        # Dibujar los objetos del equipo
         draw_objects_scene()
 
-        # Actualizar pantalla
         pygame.display.flip()
-        clock.tick(60) # Limitar a 60 FPS
+        clock.tick(60)
 
     pygame.quit()
 
